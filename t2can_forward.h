@@ -107,6 +107,7 @@ static esp_err_t canTxTwaiTransmitWithMaskTaggedGuarded(
     uint8_t requiredFreshMask, uint8_t traceSource,
     const volatile uint32_t *generation, uint32_t expectedGeneration);
 static esp_err_t canTxTwaiTransmit(const twai_message_t *msg, uint32_t expectedEpoch);
+static esp_err_t canTxTwaiTransmitBootReplay(const twai_message_t *msg);
 static esp_err_t canTxTwaiTransmitValidated(
     twai_message_t *msg, uint32_t expectedEpoch, uint8_t requiredFreshMask,
     bool (*validate)(twai_message_t *, void *), void *context);

@@ -710,7 +710,10 @@ static void canTaskTwai(void* arg) {
           }
           break;
         case 0x331:
-          if (activeCanBIsChassis()) doInjectTlsscRestore(f);
+          if (activeCanBIsChassis()) {
+            doInjectTlsscRestore(f);
+            eapNrObserve331(f, stockRxMs);
+          }
           break;
         // Model YL/public-DBC reference: UI_driverAssistMapData road context.
         case 0x238:
@@ -772,6 +775,7 @@ static void canTaskTwai(void* arg) {
     // TX queue. TSL9 input assistance is intentionally lower priority.
     continuousApService(ContApRoute::ChassisB);
     tsl9InputServiceCanB();
+    eapNrTick();
     const uint32_t captureNow = (uint32_t)millis();
     researchCaptureTick(captureNow);
     driverMonitorCaptureTick(captureNow);
@@ -948,6 +952,7 @@ static bool recoveryMcpColdInit() {
 
   pinMode(MCP2515_CS, OUTPUT);
   digitalWrite(MCP2515_CS, HIGH);
+#if MCP2515_RST >= 0
   pinMode(MCP2515_RST, OUTPUT);
   digitalWrite(MCP2515_RST, HIGH);
   delay(1);
@@ -955,6 +960,8 @@ static bool recoveryMcpColdInit() {
   delay(2);
   digitalWrite(MCP2515_RST, HIGH);
   delay(2);
+#endif
+  // No reset pin: mcpInitChecked() resets the controller over SPI.
 
   SPI.begin(MCP2515_SCLK, MCP2515_MISO, MCP2515_MOSI, MCP2515_CS);
   mcpSpiStarted = true;
@@ -1090,8 +1097,14 @@ static bool prepareCanForMaintenance() {
       !mcpReady && !twaiReady;
   // All CAN owners are parked; reset holds CAN A inactive and discards TX buffers.
   mcpReady = false;
+#if MCP2515_RST >= 0
   pinMode(MCP2515_RST, OUTPUT);
   digitalWrite(MCP2515_RST, LOW);
+#else
+  // No reset pin: the SPI reset leaves the controller in Configuration mode,
+  // off the bus with TX buffers discarded — the same inactive hold.
+  (void)Can_A.reset();
+#endif
   twaiReady = false;
   twai_status_info_t st = {};
   const esp_err_t status = twai_get_status_info(&st);
@@ -1350,6 +1363,7 @@ static void canSupervisorTask(void* arg) {
             recoverySleeping = false;
             recoveryWakeAcquireStartMs = now;
             canRecoveryWakeCount++;
+            eapNrRearmForWake();
             T2CAN_SERIAL_PRINTF("[CAN SUP] vehicle CAN wake #%lu -> acquire other bus\n",
                           (unsigned long)canRecoveryWakeCount);
           }
@@ -1413,6 +1427,7 @@ static void canSupervisorTask(void* arg) {
           recoverySleeping = false;
           recoveryColdRetryCount = 0;
           recoveryWakeAcquireStartMs = now;
+          eapNrRearmForWake();
         }
       }
     }
