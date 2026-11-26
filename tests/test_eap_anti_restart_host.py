@@ -124,11 +124,11 @@ void resetState() {
   eapNrWasEnabled = false;
 }
 
-twai_message_t stockFrame(uint8_t first = 0x00) {
+twai_message_t stockFrame(uint8_t first = 0x00, uint8_t dlc = 8) {
   twai_message_t f = {};
   f.identifier = 0x331;
-  f.data_length_code = 8;
-  for (uint8_t i = 0; i < 8; i++) f.data[i] = (uint8_t)(0x10 + i);
+  f.data_length_code = dlc;
+  for (uint8_t i = 0; i < dlc && i < 8; i++) f.data[i] = (uint8_t)(0x10 + i);
   f.data[0] = first;
   return f;
 }
@@ -142,6 +142,15 @@ int main() {
   eapNrLoad();
   assert(eapNrFrameValid && eapNrFrameLen == 8 && eapNrPersisted);
   assert(eapNrFrame[0] == 0x1B && eapNrFrame[7] == 0x16);
+  resetState();
+  Preferences::store[EAP_NR_KEY_FRAME] = "9B1112131415";
+  eapNrLoad();
+  assert(eapNrFrameValid && eapNrFrameLen == 6 && eapNrPersisted);
+  assert(eapNrFrame[0] == 0x9B && eapNrFrame[5] == 0x15);
+  resetState();
+  Preferences::store[EAP_NR_KEY_FRAME] = "9B11121314151";
+  eapNrLoad();
+  assert(!eapNrFrameValid && eapNrFrameLen == 0);
   resetState();
   Preferences::store[EAP_NR_KEY_FRAME] = "0010111213141516";
   eapNrLoad();
@@ -158,6 +167,27 @@ int main() {
   assert(sent.size() == 1 && sent[0].identifier == 0x331 && sent[0].data[0] == 0x9B);
   assert(epochs[0] == 1 && eapNrReplayOk == 1 && eapNrBurst == 1);
   assert(eapNrPersisted && Preferences::store[EAP_NR_KEY_FRAME] == "9B11121314151617");
+
+  resetState();
+  tlsscRestoreEnabled = true;
+  twai_message_t shortStock = stockFrame(0x80, 6);
+  eapNrObserve331(shortStock, 100);
+  assert(eapNrFrameValid && eapNrFrameLen == 6 && eapNrFrame[0] == 0x9B);
+  assert(eapNrPersisted && Preferences::store[EAP_NR_KEY_FRAME] == "9B1112131415");
+  now = 3000;
+  eapNrTick();
+  assert(sent.size() == 1 && sent[0].data_length_code == 6 && sent[0].data[0] == 0x9B);
+  shortStock.data[5]++;
+  eapNrObserve331(shortStock, 3300);
+  assert(eapNrFrame[5] == 0x16 && eapNrPersisted);
+  eapNrPersistFrame();
+  assert(Preferences::store[EAP_NR_KEY_FRAME] == "9B1112131415");
+  twai_message_t tooShort = stockFrame(0x00, 0);
+  eapNrObserve331(tooShort, 3100);
+  assert(eapNrFrameLen == 6);
+  twai_message_t tooLong = stockFrame(0x00, 9);
+  eapNrObserve331(tooLong, 3200);
+  assert(eapNrFrameLen == 6);
 
   resetState();
   tlsscRestoreEnabled = true;
@@ -272,12 +302,13 @@ int main() {
   eapNrPersisted = true;
   txResult = ESP_ERR_INVALID_STATE;
   eapNrTick();
-  assert(eapNrReplayFail == 1 && eapNrBurst == 0 && eapNrLastReplayMs == 1);
+  assert(eapNrReplayFail == 1 && eapNrBurst == 1 && eapNrLastReplayMs == 1);
   assert(eapNrLastErr == ESP_ERR_INVALID_STATE);
   txResult = ESP_OK;
   now = 101;
   eapNrTick();
-  assert(eapNrReplayOk == 1 && eapNrBurst == 1 && eapNrLastReplayMs == 101);
+  assert(eapNrReplayOk == 1 && eapNrBurst == 2 && eapNrLastReplayMs == 101);
+
   String json = "{\"ok\":true";
   eapNrStatsAppend(json);
   json += "}";
@@ -287,6 +318,23 @@ int main() {
   assert(text.find("\"replayFail\":1") != std::string::npos);
   assert(text.find("\"replayOk\":1") != std::string::npos);
   assert(text.find("\"lastErrName\":\"OK\"") != std::string::npos);
+
+  resetState();
+  tlsscRestoreEnabled = true;
+  eapNrFrameValid = true;
+  eapNrFrameLen = 8;
+  eapNrFrame[0] = 0x1B;
+  eapNrPersisted = true;
+  txResult = ESP_ERR_INVALID_STATE;
+  for (uint16_t i = 0; i < EAP_NR_MAX_FRAMES; i++) {
+    now = 100u + (uint32_t)i * EAP_NR_PERIOD_MS;
+    eapNrTick();
+  }
+  assert(sent.size() == EAP_NR_MAX_FRAMES);
+  assert(eapNrBurst == EAP_NR_MAX_FRAMES && eapNrReplayFail == EAP_NR_MAX_FRAMES);
+  now += EAP_NR_PERIOD_MS;
+  eapNrTick();
+  assert(sent.size() == EAP_NR_MAX_FRAMES);
 }
 '''
 
