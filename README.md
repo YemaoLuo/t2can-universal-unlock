@@ -173,7 +173,8 @@ Build it with the variant script (Arduino CLI 1.5.1 + ESP32 core 3.3.12,
 
 The default `-Board t2can` build is unchanged. Waveshare binaries are named
 `*.waveshare-s3-can-2ch.OTA.bin` / `*.waveshare-s3-can-2ch.FULLFLASH.merged.bin`
-(plus `.zh-CN` language variants) in `Final-Build`.
+(plus `.zh-CN` language variants) in `Final-Build`. The FULLFLASH image keeps the
+complete app at `0x10000` but is trimmed after the app, without 16 MB `0xFF` placeholder padding.
 
 ## 🧩 Main features
 
