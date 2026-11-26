@@ -134,7 +134,20 @@ foreach ($language in @('en', 'zh-CN')) {
         }
         New-Item -ItemType Directory -Path $finalBuild -Force | Out-Null
         foreach ($file in $publishFiles) {
-            Copy-Item -LiteralPath (Join-Path $artifacts $file.Source) -Destination (Join-Path $finalBuild $file.Target) -Force
+            $destination = Join-Path $finalBuild $file.Target
+            Copy-Item -LiteralPath (Join-Path $artifacts $file.Source) -Destination $destination -Force
+            if ($file.Target -like '*.FULLFLASH.merged.bin') {
+                # Keep the complete app at 0x10000; drop only Arduino's flash-size padding.
+                $appLength = (Get-Item -LiteralPath (Join-Path $artifacts "$sketchName.bin")).Length
+                $mergedLength = 0x10000 + $appLength
+                $paddedLength = (Get-Item -LiteralPath $destination).Length
+                if ($paddedLength -lt $mergedLength) {
+                    throw "Merged image is shorter than the app extent: $paddedLength < $mergedLength"
+                }
+                $stream = [System.IO.File]::OpenWrite($destination)
+                try { $stream.SetLength($mergedLength) } finally { $stream.Dispose() }
+                Write-Host "Fullflash trimmed: $paddedLength -> $mergedLength bytes"
+            }
         }
         Write-Host "SUCCESS: $language. OTA and fullflash copied to $finalBuild" -ForegroundColor Green
     } catch {
