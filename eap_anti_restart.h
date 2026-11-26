@@ -24,6 +24,16 @@ static volatile uint32_t eapNrArmedMs = 0;
 static volatile uint16_t eapNrBurst = 0;
 static bool eapNrWasEnabled = false;
 
+static void eapNrResetWindow() {
+  eapNrArmedMs = 0;
+  eapNrBurst = 0;
+  eapNrLastReplayMs = 0;
+}
+
+static void eapNrRearmForWake() {
+  eapNrResetWindow();
+}
+
 static void eapNrLoad() {
   Preferences p;
   if (!p.begin(EAP_NR_NS, true)) return;
@@ -44,6 +54,7 @@ static void eapNrLoad() {
     if (a < 0 || b < 0) return;
     decoded[i] = (uint8_t)((a << 4) | b);
   }
+  if ((decoded[0] & 0x3Fu) != 0x1Bu) return;
   memcpy(eapNrFrame, decoded, sizeof(decoded));
   eapNrFrameLen = 8;
   eapNrFrameValid = true;
@@ -81,11 +92,7 @@ static void eapNrObserve331(const twai_message_t &f, uint32_t ms) {
 
 static void eapNrTick() {
   const bool enabled = tlsscRestoreEnabled;
-  if (enabled && !eapNrWasEnabled) {
-    eapNrArmedMs = 0;
-    eapNrBurst = 0;
-    eapNrLastReplayMs = 0;
-  }
+  if (enabled && !eapNrWasEnabled) eapNrResetWindow();
   eapNrWasEnabled = enabled;
   if (!enabled || !activeProfileTlsscRestoreSupported() || activeProfileUsesYlTopology() ||
       !activeCanBIsChassis() || !twaiReady || canTxAdministrativeHold ||
@@ -106,16 +113,19 @@ static void eapNrTick() {
   out.rtr = 0;
   out.data_length_code = eapNrFrameLen;
   memcpy(out.data, eapNrFrame, eapNrFrameLen);
-  const esp_err_t err = canTxTwaiTransmit(&out, canTxEpochSnapshot());
+  const esp_err_t err = canTxTwaiTransmitBootReplay(&out);
   eapNrLastErr = (int16_t)err;
   if (err == ESP_ERR_TIMEOUT) {
     eapNrReplayBusy++;
     return;
   }
   eapNrLastReplayMs = now ? now : 1u;
+  if (err != ESP_OK) {
+    eapNrReplayFail++;
+    return;
+  }
   eapNrBurst++;
-  if (err == ESP_OK) eapNrReplayOk++;
-  else eapNrReplayFail++;
+  eapNrReplayOk++;
 }
 
 static void eapNrStatsAppend(String &json) {

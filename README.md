@@ -121,7 +121,9 @@ For profiles where `0x331` is handled on **CAN B / Chassis**, TLSSC Restore now 
 
 - No cached frame means no transmission; the first power cycle still needs to observe a stock `0x331`.
 - Fresh stock `0x331` traffic within 2 seconds makes replay yield to the existing read-modify-retransmit path.
-- Replay uses the existing TX barrier, epoch, administrative-hold, USB-passive and Summon admission gates.
+- Replay uses a dedicated startup TX path: it keeps the epoch, administrative-hold, USB-passive and Summon admission gates, but does not require unrelated CAN-A freshness before the first boot frame.
+- Gate or transport failures do not consume the 600-frame replay budget; the next 100 ms tick retries while the 60-second window remains open.
+- Vehicle sleep→wake and cold passive-wait exit re-open the replay window.
 - Model YL's CAN-A `0x331` route is unchanged and is not covered by this replay fix.
 - Cache and replay counters are available under `eap` in `/api/lab/service-mode/stats`.
 

@@ -1363,6 +1363,7 @@ static void canSupervisorTask(void* arg) {
             recoverySleeping = false;
             recoveryWakeAcquireStartMs = now;
             canRecoveryWakeCount++;
+            eapNrRearmForWake();
             T2CAN_SERIAL_PRINTF("[CAN SUP] vehicle CAN wake #%lu -> acquire other bus\n",
                           (unsigned long)canRecoveryWakeCount);
           }
@@ -1426,6 +1427,7 @@ static void canSupervisorTask(void* arg) {
           recoverySleeping = false;
           recoveryColdRetryCount = 0;
           recoveryWakeAcquireStartMs = now;
+          eapNrRearmForWake();
         }
       }
     }

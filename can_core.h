@@ -459,6 +459,26 @@ static esp_err_t canTxTwaiTransmit(
   return canTxTwaiTransmitWithMask(msg, expectedEpoch, CAN_TX_FRESH_BOTH);
 }
 
+// Cached TLSSC config must be able to precede the first RX frame after MCU boot.
+// Keep epoch/hold serialization, but do not require unrelated CAN-A freshness.
+static esp_err_t canTxTwaiTransmitBootReplay(const twai_message_t *msg) {
+  if (!msg) return ESP_ERR_INVALID_ARG;
+  if (canTxAdministrativeHold) {
+    canBTraceRecordTx(msg, ESP_ERR_INVALID_STATE, CAN_TX_TRACE_SOURCE_TLSSC);
+    return ESP_ERR_INVALID_STATE;
+  }
+  if (!canTxBarrierMutex || xSemaphoreTake(canTxBarrierMutex, 0) != pdTRUE) {
+    canBTraceRecordTx(msg, ESP_ERR_TIMEOUT, CAN_TX_TRACE_SOURCE_TLSSC);
+    return ESP_ERR_TIMEOUT;
+  }
+  esp_err_t err = ESP_ERR_INVALID_STATE;
+  if (!canTxAdministrativeHold && twaiReady && canTxBarrierState.epoch != 0)
+    err = twai_transmit(msg, 0);
+  xSemaphoreGive(canTxBarrierMutex);
+  canBTraceRecordTx(msg, err, CAN_TX_TRACE_SOURCE_TLSSC);
+  return err;
+}
+
 // Final feature admission and payload composition share the enqueue barrier.
 static esp_err_t canTxTwaiTransmitValidated(
     twai_message_t *msg, uint32_t expectedEpoch, uint8_t requiredFreshMask,

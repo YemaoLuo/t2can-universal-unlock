@@ -85,9 +85,9 @@ bool activeCanBIsChassis() { return chassis; }
 bool canUsbPassive() { return usbPassive; }
 bool twaiNonSummonAdmissionOpen() { return admissionOpen; }
 uint32_t canTxEpochSnapshot() { return txEpoch; }
-esp_err_t canTxTwaiTransmit(const twai_message_t *msg, uint32_t epoch) {
+esp_err_t canTxTwaiTransmitBootReplay(const twai_message_t *msg) {
   sent.push_back(*msg);
-  epochs.push_back(epoch);
+  epochs.push_back(txEpoch);
   return txResult;
 }
 
@@ -142,6 +142,10 @@ int main() {
   eapNrLoad();
   assert(eapNrFrameValid && eapNrFrameLen == 8 && eapNrPersisted);
   assert(eapNrFrame[0] == 0x1B && eapNrFrame[7] == 0x16);
+  resetState();
+  Preferences::store[EAP_NR_KEY_FRAME] = "0010111213141516";
+  eapNrLoad();
+  assert(!eapNrFrameValid && eapNrFrameLen == 0);
 
   resetState();
   twai_message_t stock = stockFrame(0x80);
@@ -244,6 +248,23 @@ int main() {
 
   resetState();
   tlsscRestoreEnabled = true;
+  eapNrFrameValid = true;
+  eapNrFrameLen = 8;
+  eapNrFrame[0] = 0x1B;
+  eapNrPersisted = true;
+  now = 1;
+  eapNrTick();
+  assert(sent.size() == 1 && eapNrBurst == 1);
+  now = EAP_NR_WINDOW_MS + 2;
+  eapNrTick();
+  assert(sent.size() == 1);
+  eapNrRearmForWake();
+  now++;
+  eapNrTick();
+  assert(sent.size() == 2 && eapNrArmedMs == now && eapNrBurst == 1);
+
+  resetState();
+  tlsscRestoreEnabled = true;
   now = 1;
   eapNrFrameValid = true;
   eapNrFrameLen = 8;
@@ -251,7 +272,12 @@ int main() {
   eapNrPersisted = true;
   txResult = ESP_ERR_INVALID_STATE;
   eapNrTick();
-  assert(eapNrReplayFail == 1 && eapNrBurst == 1 && eapNrLastErr == ESP_ERR_INVALID_STATE);
+  assert(eapNrReplayFail == 1 && eapNrBurst == 0 && eapNrLastReplayMs == 1);
+  assert(eapNrLastErr == ESP_ERR_INVALID_STATE);
+  txResult = ESP_OK;
+  now = 101;
+  eapNrTick();
+  assert(eapNrReplayOk == 1 && eapNrBurst == 1 && eapNrLastReplayMs == 101);
   String json = "{\"ok\":true";
   eapNrStatsAppend(json);
   json += "}";
@@ -259,7 +285,8 @@ int main() {
   assert(text.find("\"cacheValid\":true") != std::string::npos);
   assert(text.find("\"cacheHex\":\"1B00000000000000\"") != std::string::npos);
   assert(text.find("\"replayFail\":1") != std::string::npos);
-  assert(text.find("\"lastErrName\":\"gate-closed\"") != std::string::npos);
+  assert(text.find("\"replayOk\":1") != std::string::npos);
+  assert(text.find("\"lastErrName\":\"OK\"") != std::string::npos);
 }
 '''
 
@@ -277,10 +304,15 @@ with tempfile.TemporaryDirectory(prefix='eap-anti-restart-') as directory:
 
 ino = (ROOT / 'T2CAN-Universal-v3.30.3-LP_YL.ino').read_text(encoding='utf-8')
 runtime = (ROOT / 'can_runtime.h').read_text(encoding='utf-8')
+core = (ROOT / 'can_core.h').read_text(encoding='utf-8')
 web = (ROOT / 'web_api.h').read_text(encoding='utf-8')
 assert ino.index('featureCfgLoad();') < ino.index('eapNrLoad();')
 assert 'eapNrObserve331(f, stockRxMs);' in runtime
 assert 'tsl9InputServiceCanB();\n    eapNrTick();' in runtime
+assert runtime.count('eapNrRearmForWake();') >= 2
+assert 'canTxTwaiTransmitBootReplay(&out)' in (ROOT / 'eap_anti_restart.h').read_text(encoding='utf-8')
+assert 'static esp_err_t canTxTwaiTransmitBootReplay' in core
+assert 'canTxBarrierAllowsMaskedPure' not in core.split('static esp_err_t canTxTwaiTransmitBootReplay', 1)[1].split('// Final feature admission', 1)[0]
 assert 'eapNrStatsAppend(json);' in web
 
 print('eap anti-restart host: cache, replay, yield, limits, gates, diagnostics and hooks passed')
