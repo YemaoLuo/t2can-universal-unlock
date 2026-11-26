@@ -124,6 +124,7 @@ For profiles where `0x331` is handled on **CAN B / Chassis**, TLSSC Restore now 
 - Replay uses a dedicated startup TX path: it keeps the epoch, administrative-hold, USB-passive and Summon admission gates, but does not require unrelated CAN-A freshness before the first boot frame.
 - Gate or TX-barrier busy results do not consume the 600-attempt replay budget; the next 100 ms tick retries while the 60-second window remains open. Every non-busy send attempt consumes the budget, including failed enqueue attempts.
 - Vehicle sleep→wake and cold passive-wait exit re-open the replay window.
+- Failed NVS cache writes are retried no sooner than every 5 seconds; replay continues from the RAM cache while persistence is pending.
 - Model YL's CAN-A `0x331` route is unchanged and is not covered by this replay fix.
 - Cache and replay counters are available under `eap` in `/api/lab/service-mode/stats`.
 

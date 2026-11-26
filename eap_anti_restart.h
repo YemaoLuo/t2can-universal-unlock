@@ -8,11 +8,13 @@
 #define EAP_NR_PERIOD_MS      100u
 #define EAP_NR_MAX_FRAMES     600u
 #define EAP_NR_STOCK_FRESH_MS 2000u
+#define EAP_NR_SAVE_RETRY_MS  5000u
 
 static uint8_t eapNrFrame[8] = {};
 static volatile uint8_t eapNrFrameLen = 0;
 static volatile bool eapNrFrameValid = false;
 static volatile bool eapNrPersisted = false;
+static uint32_t eapNrSaveAttemptMs = 0;
 static volatile uint32_t eapNrStockMs = 0;
 static volatile uint32_t eapNrReplayOk = 0;
 static volatile uint32_t eapNrReplayFail = 0;
@@ -62,8 +64,11 @@ static void eapNrLoad() {
   eapNrPersisted = true;
 }
 
-static void eapNrPersistFrame() {
+static void eapNrPersistFrame(uint32_t now) {
   if (eapNrPersisted || !eapNrFrameValid) return;
+  if (eapNrSaveAttemptMs &&
+      (uint32_t)(now - eapNrSaveAttemptMs) < EAP_NR_SAVE_RETRY_MS) return;
+  eapNrSaveAttemptMs = now ? now : 1u;
   char hex[17];
   for (uint8_t i = 0; i < eapNrFrameLen; i++) snprintf(hex + i * 2, 3, "%02X", eapNrFrame[i]);
   hex[eapNrFrameLen * 2] = '\0';
@@ -89,7 +94,7 @@ static void eapNrObserve331(const twai_message_t &f, uint32_t ms) {
   memcpy(eapNrFrame, patched, f.data_length_code);
   eapNrFrameLen = f.data_length_code;
   eapNrFrameValid = true;
-  if (tlsscRestoreEnabled) eapNrPersistFrame();
+  if (tlsscRestoreEnabled) eapNrPersistFrame(ms);
 }
 
 static void eapNrTick() {
@@ -105,7 +110,7 @@ static void eapNrTick() {
   if ((uint32_t)(now - eapNrArmedMs) > EAP_NR_WINDOW_MS) return;
   if (eapNrBurst >= EAP_NR_MAX_FRAMES) return;
   if (!eapNrFrameValid) { eapNrReplaySkip++; return; }
-  eapNrPersistFrame();
+  eapNrPersistFrame(now);
   if (eapNrStockMs && (uint32_t)(now - eapNrStockMs) < EAP_NR_STOCK_FRESH_MS) return;
   if (eapNrLastReplayMs && (uint32_t)(now - eapNrLastReplayMs) < EAP_NR_PERIOD_MS) return;
 

@@ -21,6 +21,7 @@ constexpr int ESP_OK = 0;
 constexpr int ESP_ERR_INVALID_STATE = 0x103;
 constexpr int ESP_ERR_TIMEOUT = 0x107;
 constexpr int ESP_FAIL = 0x10B;
+bool writeOk = true;
 
 class String {
  public:
@@ -49,6 +50,7 @@ struct Preferences {
     return it == store.end() ? String(fallback) : String(it->second);
   }
   size_t putString(const char *key, const String &value) {
+    if (!writeOk) return 0;
     store[key] = value.value();
     return value.value().size();
   }
@@ -106,12 +108,14 @@ void resetState() {
   now = 0;
   txEpoch = 1;
   txResult = ESP_OK;
+  writeOk = true;
   sent.clear();
   epochs.clear();
   memset(eapNrFrame, 0, sizeof(eapNrFrame));
   eapNrFrameLen = 0;
   eapNrFrameValid = false;
   eapNrPersisted = false;
+  eapNrSaveAttemptMs = 0;
   eapNrStockMs = 0;
   eapNrReplayOk = 0;
   eapNrReplayFail = 0;
@@ -180,7 +184,7 @@ int main() {
   shortStock.data[5]++;
   eapNrObserve331(shortStock, 3300);
   assert(eapNrFrame[5] == 0x16 && eapNrPersisted);
-  eapNrPersistFrame();
+  eapNrPersistFrame(3300);
   assert(Preferences::store[EAP_NR_KEY_FRAME] == "9B1112131415");
   twai_message_t tooShort = stockFrame(0x00, 0);
   eapNrObserve331(tooShort, 3100);
@@ -335,6 +339,26 @@ int main() {
   now += EAP_NR_PERIOD_MS;
   eapNrTick();
   assert(sent.size() == EAP_NR_MAX_FRAMES);
+
+  resetState();
+  tlsscRestoreEnabled = true;
+  writeOk = false;
+  twai_message_t retryStock = stockFrame(0x80);
+  eapNrObserve331(retryStock, 100);
+  assert(eapNrFrameValid && !eapNrPersisted);
+  assert(eapNrSaveAttemptMs == 100 && Preferences::store.empty());
+  now = 200;
+  eapNrTick();
+  assert(eapNrSaveAttemptMs == 100 && Preferences::store.empty());
+  now = 5099;
+  eapNrTick();
+  assert(eapNrSaveAttemptMs == 100 && Preferences::store.empty());
+  assert(sent.size() == 1 && eapNrReplayOk == 1);
+  writeOk = true;
+  now = 5100;
+  eapNrTick();
+  assert(eapNrPersisted && eapNrSaveAttemptMs == 5100);
+  assert(Preferences::store[EAP_NR_KEY_FRAME] == "9B11121314151617");
 }
 '''
 
@@ -359,6 +383,9 @@ assert 'eapNrObserve331(f, stockRxMs);' in runtime
 assert 'tsl9InputServiceCanB();\n    eapNrTick();' in runtime
 assert runtime.count('eapNrRearmForWake();') >= 2
 assert 'canTxTwaiTransmitBootReplay(&out)' in (ROOT / 'eap_anti_restart.h').read_text(encoding='utf-8')
+eap = (ROOT / 'eap_anti_restart.h').read_text(encoding='utf-8')
+assert '#define EAP_NR_SAVE_RETRY_MS  5000u' in eap
+assert 'eapNrSaveAttemptMs' in eap and 'eapNrPersistFrame(now);' in eap
 assert 'static esp_err_t canTxTwaiTransmitBootReplay' in core
 assert 'canTxBarrierAllowsMaskedPure' not in core.split('static esp_err_t canTxTwaiTransmitBootReplay', 1)[1].split('// Final feature admission', 1)[0]
 assert 'eapNrStatsAppend(json);' in web
