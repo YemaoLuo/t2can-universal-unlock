@@ -1008,6 +1008,14 @@ html[data-theme="dark"] #t2PreviewControls :is(.previewApChoices,.previewModelCh
 </div>
 <section class="panel" id="panelServiceModeSettings"><div class="panelin"><div class="paneltop"><button aria-label="返回" class="backbtn"><svg aria-hidden="true" class="backIcon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button><div class="paneltitle">设置</div></div><div class="panelHero">服务模式</div><div class="panelSub" id="serviceModeBus">车身</div><section class="card" id="serviceModeSection"><div class="labControlRow"><div><div class="labControlTitle">开启服务模式</div><div class="labControlSub">0x339 · DLC 8</div></div><button type="button" class="btn" id="serviceModeEnter" disabled>开启</button></div><div class="softNote" id="serviceModeStatus" role="status" aria-live="polite">等待 BODY 总线可用。</div></section><div class="sectionhead dangerZoneHead" id="bannedDangerHead"><div class="sectiontitle"><span class="statusTag">危险</span></div><div class="sectionnote"></div></div><section class="card bannedDangerZone" id="bannedDangerZone">
 <div class="listrow vehicleStatusRestore" id="tlsscRestoreRow"><div><div class="listkey dangerKey">恢复 TLSSC</div><div class="listdesc dangerDesc" id="tlsscRestoreDesc">TLSSC 恢复覆盖可能导致封禁</div></div><label class="toggle"><input id="tlsscRestoreToggle" type="checkbox"/><span class="track"></span></label></div>
+<div class="body" id="tlsscReplayStats">
+<div class="r"><span class="rk2">0x331 缓存</span><span class="value" id="tlsscCacheState">—</span></div>
+<div class="r"><span class="rk2">重放发送</span><span class="value" id="tlsscReplayTx">—</span></div>
+<div class="r"><span class="rk2">忙碌 / 跳过</span><span class="value" id="tlsscReplaySkip">—</span></div>
+<div class="r"><span class="rk2">窗口</span><span class="value" id="tlsscReplayState">—</span></div>
+<div class="r"><span class="rk2">最后发送</span><span class="value" id="tlsscReplayLast">—</span></div>
+</div>
+<div class="softNote">恢复 TLSSC 开启时会自动执行启动重放。首次通电需要先观察到原始 0x331 帧，之后才会建立缓存。</div>
 </section></div></section>
 <section class="panel" id="panelFsdVisualisation"><div class="panelin"><div class="paneltop"><button aria-label="返回" class="backbtn"><svg aria-hidden="true" class="backIcon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button><div class="paneltitle">设置</div></div><div class="panelHero">FSD 可视化</div><div class="panelSub">实验功能</div><section class="card">
 <div class="settingToggleRow"><div><div class="listkey">UI_enableFullSelfDriving</div><div class="listdesc">0x3FD · MUX 0 · bit 46 → 1 · 回显</div></div><label class="toggle"><input id="fsdEnableEcho" type="checkbox" disabled/><span class="track"></span></label></div>
@@ -1884,6 +1892,14 @@ function renderServiceMode(s){
   serviceModeState=s;
   $('serviceModeEnter').disabled=serviceModeBusy||!s.available;
   $('serviceModeBus').textContent=s.supported?'BODY · '+s.bus:"BODY 不可用";
+  const e=s.eap||{};
+  const cacheReady=!!e.cacheValid;
+  const errNames={'OK':'成功','TX-busy':'发送忙','gate-closed':'门控关闭','send-failed':'发送失败','other':'其他'};
+  $('tlsscCacheState').textContent=cacheReady?'就绪 · '+(Number(e.cacheLen)||0)+' B':'空';
+  $('tlsscReplayTx').textContent=(Number(e.replayOk)||0)+' 成功 / '+(Number(e.replayFail)||0)+' 失败';
+  $('tlsscReplaySkip').textContent=(Number(e.replayBusy)||0)+' / '+(Number(e.replaySkip)||0);
+  $('tlsscReplayState').textContent=(e.epoch==='live'?'运行':'启动')+' · '+(Number(e.burst)||0)+' / 600';
+  $('tlsscReplayLast').textContent=errNames[e.lastErrName]||e.lastErrName||'—';
 }
 async function fetchServiceMode(){
   if(serviceModeBusy)return;

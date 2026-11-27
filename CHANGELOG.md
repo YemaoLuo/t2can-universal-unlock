@@ -2,6 +2,7 @@
 - Restore TLSSC for Model YL
 - Added Chinese Language variant
 - Added TLSSC Restore anti-restart replay for CAN B / Chassis profiles: cache the last patched 1–8-byte `0x331` payload and its DLC in NVS, replay it at 10 Hz for up to 60 seconds / 600 non-busy attempts after CAN B is ready, yield on fresh stock traffic, and expose cache/replay diagnostics in `/api/lab/service-mode/stats`. Ported from `06066060606060/P4can-universal-unlock` PR #15; Model YL's CAN-A route is unchanged.
+- Dashboard now shows the TLSSC Restore `0x331` cache and boot-replay status under Service mode in both English and zh-CN.
 - Hardened startup replay with a dedicated epoch/hold-gated TX path that does not wait for unrelated CAN-A freshness and re-opens the window after sleep/wake. TX-barrier busy yields do not consume the frame cap; every other send attempt does, including failed enqueue attempts.
 - Trimmed FULLFLASH packages after the complete app image instead of publishing 16 MB `0xFF` placeholder padding.
 - TLSSC cache persistence now backs off for 5 seconds after a failed NVS write instead of retrying on every 100 ms replay tick; the RAM cache and boot replay continue normally.
