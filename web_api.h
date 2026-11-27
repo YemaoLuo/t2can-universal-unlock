@@ -2992,6 +2992,33 @@ static void httpIsaSuppressionControlUpdate() {
   server.send(200, "application/json", isaSuppressionControlJson());
 }
 
+static String listenOnlyControlJson() {
+  String json;
+  JsonWriterArduino jw(json);
+  jw.boolean("enabled", listenOnlyControlSnapshot());
+  jw.boolean("supported", true);
+  jw.boolean("active", listenOnlyTxHeld() && canTxAdministrativeHold);
+  jw.finish();
+  return json;
+}
+
+static void httpListenOnlyControlConfig() {
+  server.send(200, "application/json", listenOnlyControlJson());
+}
+
+static void httpListenOnlyControlUpdate() {
+  bool enabled;
+  if (server.args() != 1 || !httpBoolArg("enabled", enabled)) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"invalid enabled\"}");
+    return;
+  }
+  if (!listenOnlyControlApply(enabled)) {
+    server.send(503, "application/json", "{\"ok\":false,\"error\":\"save failed\"}");
+    return;
+  }
+  server.send(200, "application/json", listenOnlyControlJson());
+}
+
 static String continuousApControlJson(){
   const uint32_t now=(uint32_t)millis(),epoch=canTxEpochSnapshot();
   portENTER_CRITICAL(&continuousApMux);
@@ -5905,6 +5932,8 @@ static void webTask(void *arg) {
               httpIsaSuppressionControlConfig);
     server.on("/api/isa-suppression/config", HTTP_POST,
               httpIsaSuppressionControlUpdate);
+    server.on("/api/listen-only/config", HTTP_GET, httpListenOnlyControlConfig);
+    server.on("/api/listen-only/config", HTTP_POST, httpListenOnlyControlUpdate);
     server.on("/api/summon/stats", HTTP_GET, httpSummonStats);
     server.on("/api/summon/tlssc-enable", HTTP_POST, httpSummonTlsscEnable);
     server.on("/api/summon/tlssc-disable", HTTP_POST, httpSummonTlsscDisable);

@@ -1255,7 +1255,8 @@ static void canUsbModeService() {
   if (ok && canTxBarrierMutex && xSemaphoreTake(canTxBarrierMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     __atomic_store_n(&canUsbTransitionHeld, false, __ATOMIC_RELEASE);
     canTxAdministrativeHold = canTxAdministrativeRequested ||
-                              canMaintenanceActive() || canUsbTxHeld();
+                              canMaintenanceActive() || canUsbTxHeld() ||
+                              listenOnlyTxHeld();
     xSemaphoreGive(canTxBarrierMutex);
   } else ok = false;
   __atomic_store_n(&canUsbModeResult, ok, __ATOMIC_RELEASE);

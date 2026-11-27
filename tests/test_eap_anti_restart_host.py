@@ -374,7 +374,7 @@ with tempfile.TemporaryDirectory(prefix='eap-anti-restart-') as directory:
     ], check=True)
     subprocess.run([str(executable)], check=True)
 
-ino = (ROOT / 'T2CAN-Universal-v3.30.3-LP_YL.ino').read_text(encoding='utf-8')
+ino = (ROOT / 'T2CAN-Universal-v3.30.4-LP_YL.ino').read_text(encoding='utf-8')
 runtime = (ROOT / 'can_runtime.h').read_text(encoding='utf-8')
 core = (ROOT / 'can_core.h').read_text(encoding='utf-8')
 web = (ROOT / 'web_api.h').read_text(encoding='utf-8')

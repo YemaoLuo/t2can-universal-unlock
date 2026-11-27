@@ -11,6 +11,7 @@
   const nagTorqueSupported=topology!==2,nagTsl9Supported=topology!==3,nagSupported=nagTorqueSupported||nagTsl9Supported,advancedEapSupported=topology!==3,pedalMapSupported=topology!==3;
   window.__t2PreviewState={model,topology,turn,ap};
   const driverMonitoring={enabled:true,supported:true,active:apActive};
+  const listenOnly={enabled:false,supported:true,active:false};
   const visionControl={requestDisabled:false,bus:0,supported:true,bodySupported:model!==1&&topology===2,busSupported:true,busSelectorVisible:model!==1,labEnabled:true,apActive,apFresh:true,stockValid:true,stockBit:1,rxAgeMs:24,rxCount:1240,gateOpen:false,txOk:0,txFail:0,state:'OFF'};
   const country={countrySupported:true,countryMode:0,countryGateOpen:false};
   const nag={enabled:false,ignoreApState:false,method:nagTorqueSupported?0:1,tsl9Sequence:0,pauseAtZeroSpeed:false,mode:7,humanVariant:1,hoRatePct:50,burstMs:300,pauseMs:2000,targetId:0x488,apStateId:0x399,steeringId:0x370,torque:[]};
@@ -50,6 +51,11 @@
       driverMonitoring.active=driverMonitoring.enabled&&apActive;
       return send(driverMonitoring);
     }
+    if(u.pathname==='/api/listen-only/config'){
+      if(u.searchParams.has('enabled'))listenOnly.enabled=u.searchParams.get('enabled')==='1';
+      listenOnly.active=listenOnly.enabled;
+      return send(listenOnly);
+    }
     if(u.pathname==='/api/vision-control/stats')return send(visionControl);
     if(u.pathname==='/api/vision-control/update'){
       if(u.searchParams.has('disabled'))visionControl.requestDisabled=u.searchParams.get('disabled')==='1';
@@ -87,8 +93,8 @@
       if(groups==='home-fast')return send({fast:homeFast,...(u.searchParams.has('slow')?{slow:homeSlow}:{})});
       if(groups==='home-slow')return send(homeSlow);
       if(groups==='lab-lite')return send({r79,alc:{alcValid:true,alcRaw:apActive?8:0,alcAgeMs:10,lane239Valid:true,lane239AgeMs:14,leftLaneExists:1,leftLineUsageRaw:2,leftForkRaw:0,rightLaneExists:1,rightLineUsageRaw:2,rightForkRaw:0},dmsNag:driverMonitoring});
-      if(groups==='settings-lite')return send({system:{fwVersion:'3.27.0'},blink:{delayMs:300},summon:{sessionActive:false},s3xy,lab3f8:{alcMode:0},r79});
-      if(groups==='system')return send({system:{fwVersion:'3.27.0'}});
+      if(groups==='settings-lite')return send({system:{fwVersion:'3.30.4'},blink:{delayMs:300},summon:{sessionActive:false},s3xy,lab3f8:{alcMode:0},r79});
+      if(groups==='system')return send({system:{fwVersion:'3.30.4'}});
       return send({});
     }
     return send({ok:true});

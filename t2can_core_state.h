@@ -145,6 +145,12 @@ static portMUX_TYPE driverMonitoringControlMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool driverMonitoringDisableEnabled = false;
 static portMUX_TYPE isaSuppressionControlMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool isaSuppressionEnabled = false;
+// Global listen-only switch; all application TX is held through canTxAdministrativeHold.
+static portMUX_TYPE listenOnlyControlMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool listenOnlyEnabled = false;
+static inline bool listenOnlyTxHeld() {
+  return __atomic_load_n(&listenOnlyEnabled, __ATOMIC_ACQUIRE);
+}
 static volatile uint32_t isaSuppressionGeneration = 0;
 static volatile uint32_t isaSuppressionModified = 0;
 static volatile uint32_t isaSuppressionTxOk = 0;

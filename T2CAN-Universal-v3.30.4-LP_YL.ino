@@ -1,4 +1,4 @@
-// T2CAN Universal v3.30.0 - Model 3/Y / Model YL firmware
+// T2CAN Universal v3.30.4 - Model 3/Y / Model YL firmware
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -66,7 +66,7 @@
 #include "text_format_arduino.h"
 #include "json_writer_arduino.h"
 
-#define FW_VERSION "v3.30.3"
+#define FW_VERSION "v3.30.4"
 
 #include "continuous_ap_fsm_pure.h"
 #include "t2can_core_state.h"

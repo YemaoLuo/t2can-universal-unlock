@@ -8,10 +8,10 @@
 
 --- 
 
-# T2CAN Universal Unlock v3.30.3
+# T2CAN Universal Unlock v3.30.4
 
 **Major Universal Release for Lilygo T2CAN**  
-**Release date:** 20 11 2026  
+**Release date:** 27 11 2026
 **[Dashboard view](https://06066060606060.github.io/t2can-universal-unlock/)**  
 
 **[仪表板模拟](https://06066060606060.github.io/t2can-universal-unlock/index-zh-cn.html)** 
@@ -21,7 +21,8 @@ Join Discord server for more info:
 https://discord.gg/euPbYG8Npc
 
 ---
-**v3.30.3 **
+**v3.30.4 **
+- Added global Listen-Only Mode (只听模式): stop all CAN transmission and frame changes while keeping reception and decoding active. Persists across reboots; English and zh-CN dashboards included.
 - Restore TLSSC for Model YL
 - Added Chinese Language variant
 - Added cached `0x331` replay for TLSSC Restore on CAN B / Chassis profiles to avoid the MCU reboot timing race (ported from P4can PR #15).

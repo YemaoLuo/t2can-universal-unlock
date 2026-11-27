@@ -364,12 +364,14 @@ static bool canMaintenanceActive() {
 static void setCanTxAdministrativeHold(bool hold) {
   if (!canTxBarrierMutex) {
     canTxAdministrativeRequested = hold;
-    canTxAdministrativeHold = hold || canMaintenanceActive() || canUsbTxHeld();
+    canTxAdministrativeHold = hold || canMaintenanceActive() || canUsbTxHeld() ||
+                              listenOnlyTxHeld();
     return;
   }
   if (xSemaphoreTake(canTxBarrierMutex, portMAX_DELAY) == pdTRUE) {
     canTxAdministrativeRequested = hold;
-    canTxAdministrativeHold = hold || canMaintenanceActive() || canUsbTxHeld();
+    canTxAdministrativeHold = hold || canMaintenanceActive() || canUsbTxHeld() ||
+                              listenOnlyTxHeld();
     xSemaphoreGive(canTxBarrierMutex);
   }
 }

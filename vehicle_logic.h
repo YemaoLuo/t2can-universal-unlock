@@ -172,7 +172,10 @@ static bool autopilotControlAdmissionOpen() {
 }
 // Caller holds canTxBarrierMutex. Never re-enter the barrier through a send wrapper.
 static esp_err_t autopilotControlTransmitLocked(const twai_message_t *msg, uint16_t waitMs) {
-  if (!activeProfileIsModelS2017()) return twai_transmit(msg, pdMS_TO_TICKS(waitMs));
+  if (!activeProfileIsModelS2017()) {
+    if (canTxAdministrativeHold) return ESP_ERR_INVALID_STATE;
+    return twai_transmit(msg, pdMS_TO_TICKS(waitMs));
+  }
   if (!msg || msg->identifier != 0x3EEu || msg->data_length_code != 8u || msg->extd || msg->rtr ||
       canTxAdministrativeHold || !mcpReady ||
       !canTxBarrierAllowsMaskedPure(canTxBarrierState, canTxBarrierState.epoch, CAN_TX_FRESH_PARTY))
@@ -5254,6 +5257,30 @@ static bool isaSuppressionControlApply(bool enabled) {
     return saved;
 }
 
+static bool listenOnlyControlSnapshot() {
+    portENTER_CRITICAL(&listenOnlyControlMux);
+    const bool enabled = listenOnlyEnabled;
+    portEXIT_CRITICAL(&listenOnlyControlMux);
+    return enabled;
+}
+
+// Publish and refresh the hold under the TX barrier so no send crosses the transition.
+static bool listenOnlyControlApply(bool enabled) {
+    if (!canTxBarrierMutex ||
+        xSemaphoreTake(canTxBarrierMutex, portMAX_DELAY) != pdTRUE) return false;
+    const bool saved = featureBoolPersist("listenOnly", enabled);
+    if (saved) {
+        portENTER_CRITICAL(&listenOnlyControlMux);
+        listenOnlyEnabled = enabled;
+        portEXIT_CRITICAL(&listenOnlyControlMux);
+        canTxAdministrativeHold = canTxAdministrativeRequested ||
+                                  canMaintenanceActive() || canUsbTxHeld() ||
+                                  listenOnlyTxHeld();
+    }
+    xSemaphoreGive(canTxBarrierMutex);
+    return saved;
+}
+
 static void featureCfgLoad() {
     CheckedPreferences prefs;
     const bool featuresOpened = prefs.begin("features", true);
@@ -5271,6 +5298,8 @@ static void featureCfgLoad() {
         featuresOpened && prefs.isKey("isaSuppress");
     const bool persistedIsaSuppressionControl =
         featuresOpened && prefs.getBool("isaSuppress", false);
+    const bool persistedListenOnly =
+        featuresOpened && prefs.getBool("listenOnly", false);
     const uint8_t persistedBlinkerTx = prefs.getUChar("blinkTx", 0xFFu);
     const bool storedBanned = found ? bytes[2] != 0u : prefs.getBool("banned", false);
     const bool storedDoor = found ? bytes[3] != 0u : prefs.getBool("doorCancel", false);
@@ -5289,6 +5318,11 @@ static void featureCfgLoad() {
     prefs.end();
     if (!featureCfgReadOk) return;
     bannedCar = storedBanned;
+    portENTER_CRITICAL(&listenOnlyControlMux);
+    listenOnlyEnabled = persistedListenOnly;
+    portEXIT_CRITICAL(&listenOnlyControlMux);
+    // Apply persisted listen-only before CAN tasks start.
+    setCanTxAdministrativeHold(canTxAdministrativeRequested);
     portENTER_CRITICAL(&fsdLabMux);
     fsdLabSignals[0].enabled = storedFsdVisual <= 3u && (storedFsdVisual & 1u);
     fsdLabSignals[0].value = storedFsdVisual <= 3u ? ((storedFsdVisual >> 1) & 1u) : 1u;

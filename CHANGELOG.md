@@ -1,3 +1,8 @@
+# T2CAN Universal v3.30.4
+- Added a global Listen-Only Mode switch in Settings (English and zh-CN): CAN reception and decoding stay live while every application transmit path on both buses is held, so no frame is sent, injected, or modified. A persistent home-page banner makes the active state unmistakable.
+- Listen-only state persists in NVS (`features/listenOnly`), defaults OFF, is applied before CAN tasks start, and is exposed through `GET/POST /api/listen-only/config` with `enabled`, `supported`, and `active` status.
+- Dashboard previews and docs include the new switch and mock endpoint in English and zh-CN.
+
 # T2CAN Universal v3.30.3
 - Restore TLSSC for Model YL
 - Added Chinese Language variant

@@ -1,4 +1,10 @@
-# T2CAN Universal v3.29.1 — Validation
+# T2CAN Universal v3.30.4 — Validation
+
+## Global Listen-Only Mode — 2026-11-27
+
+- The switch gates the shared `canTxAdministrativeHold`, covering the TWAI and MCP2515 send wrappers, boot replay, both locked direct-send paths, and service-mode sends. RX tasks and decoding remain active.
+- State is persisted as `features/listenOnly`, defaults OFF, and the hold is refreshed under the TX barrier before CAN tasks start. Failed saves leave the prior state unchanged.
+- `GET/POST /api/listen-only/config` follows the existing settings-controller contract; English and zh-CN dashboards, offline demos, and docs expose the same switch and a home-page active-state banner.
 
 ## Continuous AP brake reception compatibility — 2026-10-11
 
