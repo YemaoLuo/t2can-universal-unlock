@@ -168,6 +168,59 @@ int main() {
   c = activeWarningClear.service(activeClearIn);
   assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.rightTick == 1);
 
+  // TSL9 volume nag: the +1 itself satisfies the warning and clears it. The
+  // balancing FOUR_STEP (+1,0,-1,0) must still run to its -1 compensating step
+  // or the volume ratchets upward on every nag.
+  Tsl9InputSchedulerPure volumeWarningClear;
+  Tsl9InputInputsPure volClearIn = inputs(500000u, true, true);
+  volClearIn.completePairOnWarningClear = true;
+  c = volumeWarningClear.service(volClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 0u && c.leftTick == 1);
+  volumeWarningClear.onCommandResult(c, true, 500000u, 0u);
+  // +1 already cleared the nag: warning goes inactive mid-sequence.
+  volClearIn.nowMs = 500100u;
+  volClearIn.warningActive = false;
+  c = volumeWarningClear.service(volClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 1u && c.leftTick == 0);
+  volumeWarningClear.onCommandResult(c, true, 500100u, 0u);
+  // The compensating -1 must still fire even though the warning is gone.
+  volClearIn.nowMs = 500200u;
+  c = volumeWarningClear.service(volClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 2u && c.leftTick == -1);
+  volumeWarningClear.onCommandResult(c, true, 500200u, 0u);
+  volClearIn.nowMs = 500300u;
+  c = volumeWarningClear.service(volClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 3u && c.leftTick == 0);
+  volumeWarningClear.onCommandResult(c, true, 500300u, 0u);
+  // Sequence completed balanced; no spurious re-arm from the cleared warning.
+  volClearIn.nowMs = 500400u;
+  assert(volumeWarningClear.service(volClearIn).kind ==
+         TSL9_INPUT_COMMAND_NONE_PURE);
+
+  // TSL9 right-speed scroll uses the same net-zero FOUR_STEP. Its +1 also
+  // clears the nag, so the -1 compensating step must survive warning-clear.
+  Tsl9InputSchedulerPure speedWarningClear;
+  Tsl9InputInputsPure speedClearIn = inputs(510000u, true, true);
+  speedClearIn.mode = TSL9_INPUT_MODE_RIGHT_SPEED_PURE;
+  speedClearIn.periodicIntervalSeconds = 30u;
+  speedClearIn.completePairOnWarningClear = true;
+  c = speedWarningClear.service(speedClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 0u && c.rightTick == 1);
+  speedWarningClear.onCommandResult(c, true, 510000u, 0u);
+  speedClearIn.nowMs = 510100u;
+  speedClearIn.warningActive = false;
+  c = speedWarningClear.service(speedClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 1u && c.rightTick == 0);
+  speedWarningClear.onCommandResult(c, true, 510100u, 0u);
+  speedClearIn.nowMs = 510200u;
+  c = speedWarningClear.service(speedClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 2u && c.rightTick == -1);
+  speedWarningClear.onCommandResult(c, true, 510200u, 0u);
+  speedClearIn.nowMs = 510300u;
+  c = speedWarningClear.service(speedClearIn);
+  assert(c.kind == TSL9_INPUT_COMMAND_STEP_PURE && c.step == 3u && c.rightTick == 0);
+  speedWarningClear.onCommandResult(c, true, 510300u, 0u);
+
   // Physical input cancels a periodic gesture and restarts the full interval.
   Tsl9InputSchedulerPure periodicManual;
   Tsl9InputInputsPure manualPeriodicIn = inputs(400000u, true, false);

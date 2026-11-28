@@ -76,8 +76,11 @@ struct Tsl9InputInputsPure {
   // Torque uses warning edges as one-shot immediate triggers. TSL9 keeps its
   // legacy randomized warning repeat while the warning remains active.
   bool warningEdgeOnly;
-  // Fixed Model S/X pulses: a cleared warning must not cancel the balancing
-  // DOWN of an already-started pair. AP-off, config and CAN stops still apply.
+  // A cleared warning must not cancel the balancing DOWN of an already-started
+  // sequence. Model S/X fixed pair pulses rely on this, and so does the TSL9
+  // left-volume four-step (+1,0,-1,0): the +1 itself satisfies the warning, so
+  // letting warning-clear abort the sequence would drop the -1 and leave the
+  // volume ratcheting up on every nag. AP-off, config and CAN stops still apply.
   bool completePairOnWarningClear = false;
 };
 
@@ -216,9 +219,16 @@ class Tsl9InputSchedulerPure {
 
       if (warningFalling && !configuredWarningEdgeOnly_) {
         warningEdgePending_ = false;
+        // A balanced gesture must run to its compensating step even if the +1
+        // already cleared the warning. Both STEP patterns are net-zero
+        // (PAIR +1/-1 and FOUR_STEP +1/0/-1/0), so this covers volume,
+        // right-speed scroll and Model S/X fixed PAIR alike. Aborting on
+        // warning-clear would strand the -1 and ratchet the level upward.
+        const bool balancingGesture = in.completePairOnWarningClear &&
+            (actionPattern_ == TSL9_INPUT_PATTERN_PAIR_PURE ||
+             actionPattern_ == TSL9_INPUT_PATTERN_FOUR_STEP_PURE);
         if (active_ && activeSource_ == TSL9_INPUT_WORK_WARNING_PURE &&
-            !(in.completePairOnWarningClear &&
-              actionPattern_ == TSL9_INPUT_PATTERN_PAIR_PURE)) {
+            !balancingGesture) {
           cancelWork(TSL9_INPUT_FAILURE_WARNING_CLEARED_PURE, in.nowMs);
           if (configuredPeriodicSeconds_ != 0u) armPeriodic(in.nowMs);
         } else if (!active_ &&

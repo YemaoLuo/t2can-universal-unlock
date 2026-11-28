@@ -2799,7 +2799,12 @@ static void tsl9InputServiceRoute(bool onBodyCanA, const Frame &cached,
     bool fixedPair = false) {
   const uint32_t now = (uint32_t)millis();
   Tsl9InputInputsPure in = tsl9InputInputsSnapshot(now, onBodyCanA);
-  in.completePairOnWarningClear = fixedPair;
+  // The +1 of a balanced gesture satisfies the nag and clears the warning.
+  // Every TSL9 STEP sequence is net-zero (volume +1/0/-1/0, right-speed scroll,
+  // Model S/X fixed PAIR), so all must reach their compensating DOWN step;
+  // aborting on warning-clear would ratchet the level upward. Torque mode is
+  // exempt via warningEdgeOnly and never enters that cancellation branch.
+  in.completePairOnWarningClear = true;
   Tsl9InputCommandPure command = {};
   Frame stock = {};
   bool haveTemplate = false;

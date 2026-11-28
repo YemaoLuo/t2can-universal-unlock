@@ -303,6 +303,10 @@ void setup() {
   twaiReady = true;
   bootCaptureMarkOnce(&bootCapCanInitDoneMs);
 
+  // Put the cached patched 0x331 on the bus immediately, before CAN tasks and
+  // the 100 ms tick start, so the MCU can latch SELF_DRIVING during its boot.
+  eapNrBootKick();
+
   // Start CAN tasks immediately after both controllers are ready/running.
   BaseType_t retMcp = xTaskCreatePinnedToCore(canTaskMcp, "canA", 8192, nullptr, 5, &canTaskMcpHandle, 1);
   if (retMcp != pdPASS) {

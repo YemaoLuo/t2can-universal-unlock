@@ -126,6 +126,7 @@ void resetState() {
   eapNrArmedMs = 0;
   eapNrBurst = 0;
   eapNrWasEnabled = false;
+  eapNrBootBurst = false;
 }
 
 twai_message_t stockFrame(uint8_t first = 0x00, uint8_t dlc = 8) {
@@ -159,6 +160,43 @@ int main() {
   Preferences::store[EAP_NR_KEY_FRAME] = "0010111213141516";
   eapNrLoad();
   assert(!eapNrFrameValid && eapNrFrameLen == 0);
+
+  // Boot kick: with no cache or feature off, nothing is sent.
+  resetState();
+  eapNrBootKick();
+  assert(sent.empty());
+  Preferences::store[EAP_NR_KEY_FRAME] = "9B10111213141516";
+  eapNrLoad();
+  eapNrBootKick();
+  assert(sent.empty());  // feature still off
+  tlsscRestoreEnabled = true;
+  now = 50;
+  eapNrBootKick();  // cache + feature on -> immediate frame, no tick needed
+  assert(sent.size() == 1 && sent[0].identifier == 0x331);
+  assert(sent[0].data[0] == 0x9B && eapNrReplayOk == 1);
+  assert(eapNrBootBurst && eapNrBurst == 1 && eapNrLastReplayMs == 50);
+  // Burst cadence: next frame allowed after EAP_NR_BOOT_PERIOD_MS, not 100 ms.
+  now = 50 + EAP_NR_BOOT_PERIOD_MS;
+  eapNrTick();
+  assert(sent.size() == 2 && eapNrReplayOk == 2);
+  // Burst window ends -> fall back to the 100 ms period.
+  now = 50 + EAP_NR_BOOT_WINDOW_MS + 1;
+  eapNrTick();
+  assert(sent.size() == 3);
+  now += EAP_NR_PERIOD_MS - 1;
+  eapNrTick();
+  assert(sent.size() == 3);  // still within 100 ms cadence
+  now += 1;
+  eapNrTick();
+  assert(sent.size() == 4);
+  // Gate blocks the boot kick too.
+  resetState();
+  Preferences::store[EAP_NR_KEY_FRAME] = "9B10111213141516";
+  eapNrLoad();
+  tlsscRestoreEnabled = true;
+  usbPassive = true;
+  eapNrBootKick();
+  assert(sent.empty());
 
   resetState();
   twai_message_t stock = stockFrame(0x80);
@@ -382,8 +420,13 @@ assert ino.index('featureCfgLoad();') < ino.index('eapNrLoad();')
 assert 'eapNrObserve331(f, stockRxMs);' in runtime
 assert 'tsl9InputServiceCanB();\n    eapNrTick();' in runtime
 assert runtime.count('eapNrRearmForWake();') >= 2
+assert 'eapNrBootKick();' in ino
+assert ino.index('twaiReady = true;') < ino.index('eapNrBootKick();')
 assert 'canTxTwaiTransmitBootReplay(&out)' in (ROOT / 'eap_anti_restart.h').read_text(encoding='utf-8')
 eap = (ROOT / 'eap_anti_restart.h').read_text(encoding='utf-8')
+assert '#define EAP_NR_BOOT_PERIOD_MS 10u' in eap
+assert '#define EAP_NR_BOOT_WINDOW_MS 2000u' in eap
+assert 'eapNrBootBurst' in eap and 'EAP_NR_BOOT_PERIOD_MS : EAP_NR_PERIOD_MS' in eap
 assert '#define EAP_NR_SAVE_RETRY_MS  5000u' in eap
 assert 'eapNrSaveAttemptMs' in eap and 'eapNrPersistFrame(now);' in eap
 assert 'static esp_err_t canTxTwaiTransmitBootReplay' in core

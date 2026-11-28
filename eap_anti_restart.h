@@ -6,6 +6,12 @@
 #define EAP_NR_KEY_FRAME      "eapFrame"
 #define EAP_NR_WINDOW_MS      60000u
 #define EAP_NR_PERIOD_MS      100u
+// Cold-boot burst: the MCU latches DAS config once at its own boot. A single
+// 0x331 occupies ~0.3 ms on the bus, so 10 Hz leaves >99% of the time empty
+// and the sample can easily fall between frames. Send at 10 ms for the first
+// 2 s so a patched frame is almost always on the wire during that window.
+#define EAP_NR_BOOT_PERIOD_MS 10u
+#define EAP_NR_BOOT_WINDOW_MS 2000u
 #define EAP_NR_MAX_FRAMES     600u
 #define EAP_NR_STOCK_FRESH_MS 2000u
 #define EAP_NR_SAVE_RETRY_MS  5000u
@@ -25,11 +31,15 @@ static volatile int16_t eapNrLastErr = 0;
 static volatile uint32_t eapNrArmedMs = 0;
 static volatile uint16_t eapNrBurst = 0;
 static bool eapNrWasEnabled = false;
+// Set by eapNrBootKick() so eapNrTick() uses the burst period immediately,
+// before its own first call would otherwise arm a fresh 100 ms window.
+static bool eapNrBootBurst = false;
 
 static void eapNrResetWindow() {
   eapNrArmedMs = 0;
   eapNrBurst = 0;
   eapNrLastReplayMs = 0;
+  eapNrBootBurst = false;
 }
 
 static void eapNrRearmForWake() {
@@ -97,23 +107,8 @@ static void eapNrObserve331(const twai_message_t &f, uint32_t ms) {
   if (tlsscRestoreEnabled) eapNrPersistFrame(ms);
 }
 
-static void eapNrTick() {
-  const bool enabled = tlsscRestoreEnabled;
-  if (enabled && !eapNrWasEnabled) eapNrResetWindow();
-  eapNrWasEnabled = enabled;
-  if (!enabled || !activeProfileTlsscRestoreSupported() || activeProfileUsesYlTopology() ||
-      !activeCanBIsChassis() || !twaiReady || canTxAdministrativeHold ||
-      canUsbPassive() || !twaiNonSummonAdmissionOpen()) return;
-
-  const uint32_t now = (uint32_t)millis();
-  if (eapNrArmedMs == 0) eapNrArmedMs = now ? now : 1u;
-  if ((uint32_t)(now - eapNrArmedMs) > EAP_NR_WINDOW_MS) return;
-  if (eapNrBurst >= EAP_NR_MAX_FRAMES) return;
-  if (!eapNrFrameValid) { eapNrReplaySkip++; return; }
-  eapNrPersistFrame(now);
-  if (eapNrStockMs && (uint32_t)(now - eapNrStockMs) < EAP_NR_STOCK_FRESH_MS) return;
-  if (eapNrLastReplayMs && (uint32_t)(now - eapNrLastReplayMs) < EAP_NR_PERIOD_MS) return;
-
+// Send one cached frame. Shared by the boot-time kick and the periodic tick.
+static void eapNrSendCachedFrame(uint32_t now) {
   twai_message_t out = {};
   out.identifier = 0x331u;
   out.extd = 0;
@@ -130,6 +125,44 @@ static void eapNrTick() {
   eapNrBurst++;
   if (err == ESP_OK) eapNrReplayOk++;
   else eapNrReplayFail++;
+}
+
+// Called once in setup() right after TWAI is ready, before CAN tasks start.
+// The MCU latches its DAS config once at its own boot; waiting for the CAN
+// task's first 100 ms tick can miss that instant. Put a frame on the bus now.
+static void eapNrBootKick() {
+  if (!tlsscRestoreEnabled || !eapNrFrameValid) return;
+  if (!activeProfileTlsscRestoreSupported() || activeProfileUsesYlTopology() ||
+      !activeCanBIsChassis() || !twaiReady || canTxAdministrativeHold ||
+      canUsbPassive() || !twaiNonSummonAdmissionOpen()) return;
+  eapNrResetWindow();
+  eapNrBootBurst = true;
+  eapNrSendCachedFrame((uint32_t)millis());
+}
+
+static void eapNrTick() {
+  const bool enabled = tlsscRestoreEnabled;
+  if (enabled && !eapNrWasEnabled) eapNrResetWindow();
+  eapNrWasEnabled = enabled;
+  if (!enabled || !activeProfileTlsscRestoreSupported() || activeProfileUsesYlTopology() ||
+      !activeCanBIsChassis() || !twaiReady || canTxAdministrativeHold ||
+      canUsbPassive() || !twaiNonSummonAdmissionOpen()) return;
+
+  const uint32_t now = (uint32_t)millis();
+  if (eapNrArmedMs == 0) eapNrArmedMs = now ? now : 1u;
+  if ((uint32_t)(now - eapNrArmedMs) > EAP_NR_WINDOW_MS) return;
+  if (eapNrBurst >= EAP_NR_MAX_FRAMES) return;
+  if (!eapNrFrameValid) { eapNrReplaySkip++; return; }
+  eapNrPersistFrame(now);
+  if (eapNrStockMs && (uint32_t)(now - eapNrStockMs) < EAP_NR_STOCK_FRESH_MS) return;
+  // Burst fast for the first 2 s after boot so the MCU's one-shot latch almost
+  // always sees a patched frame on the wire; then fall back to the 10 Hz cadence.
+  const uint32_t period = eapNrBootBurst &&
+      (uint32_t)(now - eapNrArmedMs) < EAP_NR_BOOT_WINDOW_MS
+      ? EAP_NR_BOOT_PERIOD_MS : EAP_NR_PERIOD_MS;
+  if (eapNrLastReplayMs && (uint32_t)(now - eapNrLastReplayMs) < period) return;
+
+  eapNrSendCachedFrame(now);
 }
 
 static void eapNrStatsAppend(String &json) {

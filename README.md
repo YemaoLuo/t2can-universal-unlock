@@ -118,8 +118,9 @@ https://discord.gg/euPbYG8Npc
 
 ### TLSSC Restore anti-restart
 
-For profiles where `0x331` is handled on **CAN B / Chassis**, TLSSC Restore now caches the last observed patched 1–8-byte `0x331` payload and its DLC in NVS (`features/eapFrame`). After CAN B is ready, the cached frame is replayed at 10 Hz for up to 60 seconds or 600 non-busy send attempts, so the MCU can read `SELF_DRIVING` during its own boot instead of waiting for the first stock frame.
+For profiles where `0x331` is handled on **CAN B / Chassis**, TLSSC Restore now caches the last observed patched 1–8-byte `0x331` payload and its DLC in NVS (`features/eapFrame`). The cached frame is put on the bus immediately after TWAI is ready (before the CAN tasks start), then replayed for up to 60 seconds or 600 non-busy send attempts, so the MCU can read `SELF_DRIVING` during its own boot instead of waiting for the first stock frame.
 
+- **Boot kick + burst**: the first cached frame is sent as soon as CAN B is ready, without waiting for the 100 ms CAN task tick. For the first 2 seconds the replay cadence is 10 ms (not 100 ms) — a single `0x331` occupies only ~0.3 ms on the bus, so a faster burst is needed to cover the one-shot instant when the MCU latches its DAS configuration. After 2 seconds replay falls back to 10 Hz.
 - No cached frame means no transmission; the first power cycle still needs to observe a stock `0x331`.
 - Fresh stock `0x331` traffic within 2 seconds makes replay yield to the existing read-modify-retransmit path.
 - Replay uses a dedicated startup TX path: it keeps the epoch, administrative-hold, USB-passive and Summon admission gates, but does not require unrelated CAN-A freshness before the first boot frame.
